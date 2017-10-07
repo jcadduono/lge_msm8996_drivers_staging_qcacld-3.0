@@ -2375,7 +2375,7 @@ int hdd_softap_set_channel_change(struct net_device *dev, int target_channel,
 	status = wlansap_set_channel_change_with_csa(
 		WLAN_HDD_GET_SAP_CTX_PTR(pHostapdAdapter),
 		(uint32_t)target_channel,
-		target_bw);
+		target_bw, true);
 
 	if (QDF_STATUS_SUCCESS != status) {
 		hdd_err("SAP set channel failed for channel: %d, bw: %d",
@@ -2823,6 +2823,29 @@ static __iw_softap_setparam(struct net_device *dev,
 		ret = wma_cli_set_command(pHostapdAdapter->sessionId,
 					  WMA_VDEV_TXRX_FWSTATS_ENABLE_CMDID,
 					  set_value, VDEV_CMD);
+#ifdef FEATURE_SUPPORT_LGE
+// [LGE_CHANGE_S] 2017.04.26, neo-wifi@lge.com, Add Reset Command for KPI log
+		hdd_debug("WE_TXRX_FWSTATS_RESET val %d", set_value);
+		ret = wma_cli_set_command(pHostapdAdapter->sessionId,
+					  WMA_VDEV_TXRX_FWSTATS_RESET_CMDID,
+					  set_value, VDEV_CMD);
+// [LGE_CHANGE_E] 2017.04.26, neo-wifi@lge.com, Add Reset Command for KPI log
+        {
+            hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
+            hdd_tx_rx_stats_t *pStats = &adapter->hdd_stats.hddTxRxStats;
+            int iTxDropCnt, iTxReqCnt, iRxReqCnt, iRxDropCnt;
+            int i=0;
+
+            iTxReqCnt  = pStats->txXmitClassifiedAC[SME_AC_BK]+pStats->txXmitClassifiedAC[SME_AC_BE]+pStats->txXmitClassifiedAC[SME_AC_VI]+pStats->txXmitClassifiedAC[SME_AC_VO];
+            iTxDropCnt = pStats->txXmitDroppedAC[SME_AC_BK]+pStats->txXmitDroppedAC[SME_AC_BE]+pStats->txXmitDroppedAC[SME_AC_VI]+pStats->txXmitDroppedAC[SME_AC_VO];
+            iRxReqCnt  = iRxDropCnt = 0;
+            for(i=0; i<NUM_CPUS; i++) {
+                iRxReqCnt += pStats->rxPackets[i];
+                iRxDropCnt += pStats->rxDropped[i];
+            }
+            hdd_err("[LGE] SoftAP Statistic Info - TxReq=%d, TxDrop=%d, RxReq=%d, RxDrop=%d \n", iTxReqCnt, iTxDropCnt, iRxReqCnt, iRxDropCnt);
+        }
+#endif
 		break;
 	}
 	/* Firmware debug log */
@@ -7369,10 +7392,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	ENTER();
 
-	if (!update_beacon && (cds_is_connection_in_progress(NULL, NULL) ||
-		pHddCtx->btCoexModeSet)) {
-		hdd_err("Can't start BSS: connection ot btcoex(%d) is in progress",
-			pHddCtx->btCoexModeSet);
+	if (!update_beacon && cds_is_connection_in_progress(NULL, NULL)) {
+		hdd_err("Can't start BSS: connection is in progress");
 		return -EINVAL;
 	}
 
@@ -8291,11 +8312,6 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	hdd_debug("pAdapter = %p, Device mode %s(%d) sub20 %d",
 		pAdapter, hdd_device_mode_to_string(pAdapter->device_mode),
 		pAdapter->device_mode, cds_is_sub_20_mhz_enabled());
-
-	if (pHddCtx->btCoexModeSet) {
-		hdd_debug("BTCoex Mode operation in progress");
-		return -EBUSY;
-	}
 
 	if (cds_is_connection_in_progress(NULL, NULL)) {
 		hdd_err("Can't start BSS: connection is in progress");

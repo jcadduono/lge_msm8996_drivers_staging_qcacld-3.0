@@ -46,6 +46,7 @@
 #include "cds_concurrency.h"
 #include "wma_api.h"
 #include "cds_utils.h"
+#include "wma.h"
 
 #define MAX_RATES                       12
 #define HDD_WAKE_LOCK_SCAN_DURATION (5 * 1000) /* in msec */
@@ -79,6 +80,12 @@ typedef struct hdd_scan_info {
 	char *start;
 	char *end;
 } hdd_scan_info_t, *hdd_scan_info_tp;
+
+#ifdef FEATURE_SUPPORT_LGE
+/*LGE_CHNAGE_S, DRIVER scan_suppress command, 2017-07-12, moon-wifi@lge.com*/
+unsigned long static g_scansuppress_mode = 0;
+/*LGE_CHNAGE_E, DRIVER scan_suppress command, 2017-07-12, moon-wifi@lge.com*/
+#endif
 
 /**
  * hdd_translate_abg_rate_to_mbps_rate() - translate abg rate to Mbps rate
@@ -815,6 +822,9 @@ static int __iw_set_scan(struct net_device *dev, struct iw_request_info *info,
 	hdd_adapter_t *con_sap_adapter;
 	uint16_t con_dfs_ch;
 	int ret;
+	uint8_t source;
+	struct cfg80211_scan_request *req;
+	uint32_t timestamp;
 
 	ENTER_DEV(dev);
 
@@ -932,19 +942,21 @@ static int __iw_set_scan(struct net_device *dev, struct iw_request_info *info,
 	}
 	hdd_update_dbs_scan_ctrl_ext_flag(hdd_ctx, &scanRequest);
 	scanRequest.timestamp = qdf_mc_timer_get_system_time();
+	wma_get_scan_id(&scanRequest.scan_id);
+	pAdapter->scan_info.mScanPending = true;
+	wlan_hdd_scan_request_enqueue(pAdapter, NULL, NL_SCAN,
+			scanRequest.scan_id,
+			scanRequest.timestamp);
 	status = sme_scan_request((WLAN_HDD_GET_CTX(pAdapter))->hHal,
 				  pAdapter->sessionId, &scanRequest,
 				  &hdd_scan_request_callback, dev);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		hdd_err("sme_scan_request  fail %d!!!", status);
+		wlan_hdd_scan_request_dequeue(hdd_ctx, scanRequest.scan_id,
+			&req, &source, &timestamp);
+		pAdapter->scan_info.mScanPending = false;
 		goto error;
 	}
-
-	wlan_hdd_scan_request_enqueue(pAdapter, NULL, NL_SCAN,
-			scanRequest.scan_id,
-			scanRequest.timestamp);
-
-	pAdapter->scan_info.mScanPending = true;
 error:
 	if ((wrqu->data.flags & IW_SCAN_THIS_ESSID) && (scanReq->essid_len))
 		qdf_mem_free(scanRequest.SSIDs.SSIDList);
@@ -1274,18 +1286,18 @@ static QDF_STATUS hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
 	uint32_t size = 0;
 
 	ret = wlan_hdd_validate_context(hddctx);
-	if (0 != ret)
+
+// LGE_CHANGE_START, 2017.0710, neo-wifi@lge.com, Suspend delay caused by scan pending, QCT Case 03029631
+    if (ret) {
+        hdd_err("Invalid hdd_ctx; Drop results for scanId %d", scanId);
 		return QDF_STATUS_E_INVAL;
+    }
+// LGE_CHANGE_END,   2017.0710, neo-wifi@lge.com, Suspend delay caused by scan pending, QCT Case 03029631
 
 	hdd_debug("called with hal = %p, pContext = %p, ID = %d, status = %d",
 		   halHandle, pContext, (int)scanId, (int)status);
 
 	pScanInfo->mScanPendingCounter = 0;
-
-	if (pScanInfo->mScanPending != true) {
-		QDF_ASSERT(pScanInfo->mScanPending);
-		goto allow_suspend;
-	}
 
 	if (QDF_STATUS_SUCCESS !=
 		wlan_hdd_scan_request_dequeue(hddctx, scanId, &req, &source,
@@ -1669,6 +1681,9 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	uint8_t curr_session_id;
 	scan_reject_states curr_reason;
 	static uint32_t scan_ebusy_cnt;
+	struct cfg80211_scan_request *req;
+	uint32_t timestamp;
+	uint32_t scan_req_id;
 
 	ENTER();
 
@@ -1686,6 +1701,15 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 
 	if (0 != status)
 		return status;
+
+#ifdef FEATURE_SUPPORT_LGE
+/*LGE_CHNAGE_S, DRIVER scan_suppress command, 2017-07-12, moon-wifi@lge.com*/
+	if ((g_scansuppress_mode == 1) && (request->wdev->iftype != NL80211_IFTYPE_AP)) {
+		hdd_err("lge priv-command scansuppress is enabled, scan is not allowed");
+		return -EPERM;
+	}
+/*LGE_CHNAGE_E, DRIVER scan_suppress command, 2017-07-12, moon-wifi@lge.com*/
+#endif
 
 	if ((eConnectionState_Associated ==
 			WLAN_HDD_GET_STATION_CTX_PTR(pAdapter)->
@@ -1797,13 +1821,6 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		return status;
 	}
 #endif
-
-	if (pHddCtx->btCoexModeSet) {
-		scan_ebusy_cnt++;
-		cds_info("BTCoex Mode operation in progress. scan_ebusy_cnt: %d",
-			 scan_ebusy_cnt);
-		return -EBUSY;
-	}
 
 	/* Check if scan is allowed at this point of time */
 	if (cds_is_connection_in_progress(&curr_session_id, &curr_reason)) {
@@ -2080,10 +2097,14 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	hdd_prevent_suspend_timeout(HDD_WAKE_LOCK_SCAN_DURATION,
 				    WIFI_POWER_EVENT_WAKELOCK_SCAN);
 
-	hdd_debug("requestType %d, scanType %d, minChnTime %d, maxChnTime %d,p2pSearch %d, skipDfsChnlIn P2pSearch %d",
+#ifdef FEATURE_SUPPORT_LGE
+// LGE_CHANGE_START, 2017.03-07, neo-wifi@lge.com, Add Scan log
+	hdd_err("requestType %d, scanType %d, minChnTime %d, maxChnTime %d,p2pSearch %d, skipDfsChnlIn P2pSearch %d",
 	       scan_req.requestType, scan_req.scanType,
 	       scan_req.minChnTime, scan_req.maxChnTime,
 	       scan_req.p2pSearch, scan_req.skipDfsChnlInP2pSearch);
+// LGE_CHANGE_END, 2017.03-07, neo-wifi@lge.com, Add Scan log
+#endif
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 7, 0))
 	if (request->flags & NL80211_SCAN_FLAG_FLUSH) {
 		hdd_debug("Kernel scan flush flag enabled");
@@ -2118,6 +2139,11 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 
 	hdd_update_dbs_scan_ctrl_ext_flag(pHddCtx, &scan_req);
 	qdf_runtime_pm_prevent_suspend(&pHddCtx->runtime_context.scan);
+	wma_get_scan_id(&scan_req_id);
+	scan_req.scan_id = scan_req_id;
+	wlan_hdd_scan_request_enqueue(pAdapter, request, source,
+			scan_req.scan_id, scan_req.timestamp);
+	pAdapter->scan_info.mScanPending = true;
 	status = sme_scan_request(WLAN_HDD_GET_HAL_CTX(pAdapter),
 				pAdapter->sessionId, &scan_req,
 				&hdd_cfg80211_scan_done_callback, dev);
@@ -2132,14 +2158,14 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		} else {
 			status = -EIO;
 		}
-
+		wlan_hdd_scan_request_dequeue(pHddCtx, scan_req.scan_id,
+				&req, &source,
+				&timestamp);
+		pAdapter->scan_info.mScanPending = false;
 		qdf_runtime_pm_allow_suspend(&pHddCtx->runtime_context.scan);
 		hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_SCAN);
 		goto free_mem;
 	}
-	wlan_hdd_scan_request_enqueue(pAdapter, request, source,
-			scan_req.scan_id, scan_req.timestamp);
-	pAdapter->scan_info.mScanPending = true;
 	pHddCtx->beacon_probe_rsp_cnt_per_scan = 0;
 
 free_mem:
@@ -2674,7 +2700,7 @@ static int __wlan_hdd_vendor_abort_scan(
 {
 	hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_SCAN_MAX + 1];
-	uint32_t scan_id;
+	uint32_t scan_id = 0;
 	uint64_t cookie;
 	int ret;
 
@@ -3554,3 +3580,17 @@ void wlan_hdd_fill_whitelist_ie_attrs(bool *ie_whitelist,
 		}
 	}
 }
+
+#ifdef FEATURE_SUPPORT_LGE
+/*LGE_CHNAGE_S, DRIVER scan_suppress command, 2017-07-12, moon-wifi@lge.com*/
+void wlan_hdd_set_scan_suppress(unsigned long on_off);
+void wlan_hdd_set_scan_suppress(unsigned long on_off) {
+	if (on_off == 1) {
+		g_scansuppress_mode = 1;
+	}
+	else {
+		g_scansuppress_mode = 0;
+	}
+}
+/*LGE_CHNAGE_E, DRIVER scan_suppress command, 2017-07-12, moon-wifi@lge.com*/
+#endif

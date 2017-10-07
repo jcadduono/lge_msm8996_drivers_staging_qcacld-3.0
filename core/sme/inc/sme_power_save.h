@@ -45,7 +45,7 @@
  * Auto Ps Entry User default timeout value, used instead of negative timeouts
  * from user space - 5000ms
  */
-#define AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE 5000
+#define AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE 1000
 
 
 /**

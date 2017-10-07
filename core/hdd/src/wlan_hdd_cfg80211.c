@@ -1273,8 +1273,8 @@ int wlan_hdd_sap_cfg_dfs_override(hdd_adapter_t *adapter)
  * Return: None
  */
 
-static void wlan_hdd_set_acs_ch_range(tsap_Config_t *sap_cfg, bool ht_enabled,
-							bool vht_enabled)
+static void wlan_hdd_set_acs_ch_range(tsap_Config_t *sap_cfg,
+			bool ht_enabled, bool vht_enabled)
 {
 	int i;
 	if (sap_cfg->acs_cfg.hw_mode == QCA_ACS_MODE_IEEE80211B) {
@@ -1586,7 +1586,8 @@ static int __wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
 			sap_config->acs_cfg.ch_width = eHT_CHANNEL_WIDTH_40MHZ;
 	}
 
-	wlan_hdd_set_acs_ch_range(sap_config, ht_enabled, vht_enabled);
+	wlan_hdd_set_acs_ch_range(sap_config,
+			ht_enabled, vht_enabled);
 
 	hdd_debug("ACS Config for wlan%d: HW_MODE: %d ACS_BW: %d HT: %d VHT: %d START_CH: %d END_CH: %d",
 		adapter->dev->ifindex, sap_config->acs_cfg.hw_mode,
@@ -7623,6 +7624,7 @@ void hdd_init_bpf_completion(void)
 static const struct nla_policy
 wlan_hdd_sap_config_policy[QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_CHANNEL] = {.type = NLA_U8 },
+	[QCA_WLAN_VENDOR_ATTR_SAP_MANDATORY_FREQUENCY_LIST] = {.type = NLA_NESTED },
 };
 
 static const struct nla_policy
@@ -8091,7 +8093,7 @@ __wlan_hdd_cfg80211_sap_configuration_set(struct wiphy *wiphy,
 
 		for (i = 0; i < freq_len; i++) {
 			chans[i] = ieee80211_frequency_to_channel(freq[i]);
-			hdd_debug("freq[%d]=%d", i, freq[i]);
+			hdd_err("freq[%d]=%d", i, freq[i]);
 		}
 
 		status = cds_set_sap_mandatory_channels(chans, freq_len);
@@ -10866,7 +10868,11 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 	    || pCfg->isEseIniFeatureEnabled
 #endif
 	    ) {
+#ifndef FEATURE_SUPPORT_LGE
+// LGE_CHANGE_S, Do not use SUPPORTS_FW_ROAM because we support BSSID selection by framework
 		wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM;
+// LGE_CHANGE_E, Do not use SUPPORTS_FW_ROAM because we support BSSID selection by framework
+#endif
 	}
 #ifdef FEATURE_WLAN_TDLS
 	wiphy->flags |= WIPHY_FLAG_SUPPORTS_TDLS
@@ -11204,62 +11210,138 @@ void wlan_hdd_cfg80211_update_wiphy_caps(struct wiphy *wiphy)
 }
 
 /* This function registers for all frame which supplicant is interested in */
-void wlan_hdd_cfg80211_register_frames(hdd_adapter_t *pAdapter)
+int wlan_hdd_cfg80211_register_frames(hdd_adapter_t *pAdapter)
 {
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
 	/* Register for all P2P action, public action etc frames */
 	uint16_t type = (SIR_MAC_MGMT_FRAME << 2) | (SIR_MAC_MGMT_ACTION << 4);
+	QDF_STATUS status;
 
 	ENTER();
 
 	/* Register frame indication call back */
-	sme_register_mgmt_frame_ind_callback(hHal, hdd_indicate_mgmt_frame);
+	status = sme_register_mgmt_frame_ind_callback(hHal,
+			hdd_indicate_mgmt_frame);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register hdd_indicate_mgmt_frame");
+		goto ret_status;
+	}
 
 	/* Register for p2p ack indication */
-	sme_register_p2p_ack_ind_callback(hHal, hdd_send_action_cnf_cb);
+	status = sme_register_p2p_ack_ind_callback(hHal,
+			hdd_send_action_cnf_cb);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register hdd_send_action_cnf_cb");
+		goto ret_status;
+	}
 
 	/* Right now we are registering these frame when driver is getting
 	   initialized. Once we will move to 2.6.37 kernel, in which we have
 	   frame register ops, we will move this code as a part of that */
 	/* GAS Initial Request */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) GAS_INITIAL_REQ,
 				GAS_INITIAL_REQ_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_INITIAL_REQ");
+		goto ret_status;
+	}
 
 	/* GAS Initial Response */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) GAS_INITIAL_RSP,
 				GAS_INITIAL_RSP_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_INITIAL_RSP");
+		goto dereg_gas_initial_req;
+	}
 
 	/* GAS Comeback Request */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) GAS_COMEBACK_REQ,
 				GAS_COMEBACK_REQ_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_COMEBACK_REQ");
+		goto dereg_gas_initial_rsp;
+	}
 
 	/* GAS Comeback Response */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) GAS_COMEBACK_RSP,
 				GAS_COMEBACK_RSP_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_COMEBACK_RSP");
+		goto dereg_gas_comeback_req;
+	}
 
 	/* P2P Public Action */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) P2P_PUBLIC_ACTION_FRAME,
 				P2P_PUBLIC_ACTION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register P2P_PUBLIC_ACTION_FRAME");
+		goto dereg_gas_comeback_rsp;
+	}
 
 	/* P2P Action */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) P2P_ACTION_FRAME,
 				P2P_ACTION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register P2P_ACTION_FRAME");
+		goto dereg_p2p_public_action_frm;
+	}
 
 	/* WNM BSS Transition Request frame */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
 				(uint8_t *) WNM_BSS_ACTION_FRAME,
 				WNM_BSS_ACTION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register WNM_BSS_ACTION_FRAME");
+		goto dereg_p2p_action_frm;
+	}
 
 	/* WNM-Notification */
-	sme_register_mgmt_frame(hHal, pAdapter->sessionId, type,
+	status = sme_register_mgmt_frame(hHal, pAdapter->sessionId, type,
 				(uint8_t *) WNM_NOTIFICATION_FRAME,
 				WNM_NOTIFICATION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register hdd_send_action_cnf_cb");
+		goto dereg_wnm_bss_action_frm;
+	}
+	return qdf_status_to_os_return(status);
+
+dereg_wnm_bss_action_frm:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) WNM_BSS_ACTION_FRAME,
+			WNM_BSS_ACTION_FRAME_SIZE);
+dereg_p2p_action_frm:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) P2P_ACTION_FRAME,
+			P2P_ACTION_FRAME_SIZE);
+dereg_p2p_public_action_frm:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) P2P_PUBLIC_ACTION_FRAME,
+			P2P_PUBLIC_ACTION_FRAME_SIZE);
+dereg_gas_comeback_rsp:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_COMEBACK_RSP,
+			GAS_COMEBACK_RSP_SIZE);
+dereg_gas_comeback_req:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_COMEBACK_REQ,
+			GAS_COMEBACK_REQ_SIZE);
+dereg_gas_initial_rsp:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_INITIAL_RSP,
+			GAS_INITIAL_RSP_SIZE);
+dereg_gas_initial_req:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_INITIAL_REQ,
+			GAS_INITIAL_REQ_SIZE);
+ret_status:
+	return qdf_status_to_os_return(status);
+
 }
 
 void wlan_hdd_cfg80211_deregister_frames(hdd_adapter_t *pAdapter)
@@ -11384,26 +11466,6 @@ uint8_t *wlan_hdd_cfg80211_get_ie_ptr(const uint8_t *ies_ptr, int length,
 	return NULL;
 }
 
-bool wlan_hdd_is_ap_supports_immediate_power_save(uint8_t *ies, int length)
-{
-	uint8_t *vendor_ie;
-
-	if (length < 2) {
-		hdd_debug("bss size is less than expected");
-		return true;
-	}
-	if (!ies) {
-		hdd_debug("invalid IE pointer");
-		return true;
-	}
-	vendor_ie = wlan_hdd_get_vendor_oui_ie_ptr(VENDOR1_AP_OUI_TYPE,
-				VENDOR1_AP_OUI_TYPE_SIZE, ies, length);
-	if (vendor_ie) {
-		hdd_debug("AP can't support immediate powersave. defer it");
-		return false;
-	}
-	return true;
-}
 
 /*
  * FUNCTION: wlan_hdd_validate_operation_channel
@@ -13493,12 +13555,13 @@ static bool wlan_hdd_handle_sap_sta_dfs_conc(hdd_adapter_t *adapter,
 	}
 
 	/*
-	 * If channel is 0 or DFS then better to call pcl and find out the
-	 * best channel. If channel is non-dfs 5 GHz then better move SAP
-	 * to STA's channel to make scc, so we have room for 3port MCC
-	 * scenario.
+	 * If channel is 0 or DFS or LTE unsafe then better to call pcl and
+	 * find out the best channel. If channel is non-dfs 5 GHz then
+	 * better move SAP to STA's channel to make scc, so we have room
+	 * for 3port MCC scenario.
 	 */
-	if ((0 == channel) || CDS_IS_DFS_CH(channel))
+	if ((0 == channel) || CDS_IS_DFS_CH(channel) ||
+		!cds_is_safe_channel(channel))
 		channel = cds_get_nondfs_preferred_channel(CDS_SAP_MODE,
 								true);
 
@@ -13506,7 +13569,7 @@ static bool wlan_hdd_handle_sap_sta_dfs_conc(hdd_adapter_t *adapter,
 	qdf_event_reset(&hostapd_state->qdf_event);
 	status = wlansap_set_channel_change_with_csa(
 			WLAN_HDD_GET_SAP_CTX_PTR(ap_adapter), channel,
-			hdd_ap_ctx->sapConfig.ch_width_orig);
+			hdd_ap_ctx->sapConfig.ch_width_orig, false);
 
 	if (QDF_STATUS_SUCCESS != status) {
 		hdd_err("Set channel with CSA IE failed, can't allow STA");
@@ -13609,11 +13672,6 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 		hdd_err("wrong SSID len");
 		status = -EINVAL;
 		goto ret_status;
-	}
-
-	if (pHddCtx->btCoexModeSet) {
-		hdd_err("BTCoex Mode operation in progress");
-		return -EBUSY;
 	}
 
 	if (true == cds_is_connection_in_progress(NULL, NULL)) {

@@ -769,7 +769,7 @@ struct hdd_station_ctx {
 #ifdef WLAN_FEATURE_NAN_DATAPATH
 	struct nan_datapath_ctx ndp_ctx;
 #endif
-	bool ap_supports_immediate_power_save;
+
 };
 
 #define BSS_STOP    0
@@ -1461,6 +1461,16 @@ struct hdd_nud_stats_context {
 	struct completion response_event;
 };
 
+/**
+ * struct sta_ap_intf_check_work_ctx - sta_ap_intf_check_work
+ * related info
+ * @adapter: adaptor of the interface to which SAP to do SCC
+ *         with
+ */
+struct sta_ap_intf_check_work_ctx {
+	hdd_adapter_t *adapter;
+};
+
 /** Adapter structure definition */
 struct hdd_context_s {
 	/** Global CDS context  */
@@ -1755,6 +1765,7 @@ struct hdd_context_s {
 	struct vdev_spectral_configure_params ss_config;
 	int sscan_pid;
 #endif
+	struct sta_ap_intf_check_work_ctx *sta_ap_intf_check_work_info;
 };
 
 int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
@@ -2251,6 +2262,7 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 			   bool reinit);
 int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx, bool ftm_mode);
 int hdd_start_adapter(hdd_adapter_t *adapter);
+void hdd_populate_random_mac_addr(hdd_context_t *hdd_ctx, uint32_t num);
 
 /**
  * hdd_get_bss_entry() - Get the bss entry matching the chan, bssid and ssid

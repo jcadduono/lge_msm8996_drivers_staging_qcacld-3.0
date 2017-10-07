@@ -1223,9 +1223,25 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 					&frm.VHTOperation);
 			is_vht = true;
 		} else {
+#ifdef FEATURE_SUPPORT_LGE
+// LGE_CHANGE_START, 2017.0628, neo-wifi@lge.com, Assoc response 2x2 in SAP mode, QCT Case 03003077
+           /*
+            * 2G-AS platform: SAP associates with HT (11n)clients
+            * as 2x1 in 2G and 2X2 in 5G
+            * Non-2G-AS platform: SAP associates with HT (11n)
+            * clients as 2X2 in 2G and 5G
+            * 5G-AS: Don?t care
+            */
+           if (frm.HTCaps.present && mac_ctx->hw_dbs_capable &&
+               mac_ctx->lteCoexAntShare &&
+               IS_24G_CH(pe_session->currentOperChannel))
+                frm.HTCaps.supportedMCSSet[1] = 0;
+// LGE_CHANGE_END, 2017.0628, neo-wifi@lge.com, Assoc response 2x2 in SAP mode, QCT Case 03003077
+#else
 			/* Advertise 1x1 if either is HT-STA */
 			if (frm.HTCaps.present && mac_ctx->hw_dbs_capable)
 				frm.HTCaps.supportedMCSSet[1] = 0;
+#endif
 		}
 		if (pe_session->vhtCapability &&
 		    pe_session->vendor_vht_sap &&

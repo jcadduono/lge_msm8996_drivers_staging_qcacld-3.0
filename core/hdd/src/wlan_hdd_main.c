@@ -1721,7 +1721,12 @@ int hdd_start_adapter(hdd_adapter_t *adapter)
 	 * Action frame registered in one adapter which will
 	 * applicable to all interfaces
 	 */
-	wlan_hdd_cfg80211_register_frames(adapter);
+	ret = wlan_hdd_cfg80211_register_frames(adapter);
+
+	if (ret < 0) {
+		hdd_err("Failed to register frames - ret %d", ret);
+		goto err_start_adapter;
+	}
 exit:
 	EXIT();
 	return 0;
@@ -3946,6 +3951,11 @@ QDF_STATUS hdd_stop_all_adapters(hdd_context_t *hdd_ctx)
 	ENTER();
 
 	cds_flush_work(&hdd_ctx->sap_pre_cac_work);
+	if (hdd_ctx->sta_ap_intf_check_work_info) {
+		cds_flush_work(&hdd_ctx->sta_ap_intf_check_work);
+		qdf_mem_free(hdd_ctx->sta_ap_intf_check_work_info);
+		hdd_ctx->sta_ap_intf_check_work_info = NULL;
+	}
 
 	status = hdd_get_front_adapter(hdd_ctx, &adapterNode);
 
@@ -3971,6 +3981,11 @@ QDF_STATUS hdd_reset_all_adapters(hdd_context_t *hdd_ctx)
 	ENTER();
 
 	cds_flush_work(&hdd_ctx->sap_pre_cac_work);
+	if (hdd_ctx->sta_ap_intf_check_work_info) {
+		cds_flush_work(&hdd_ctx->sta_ap_intf_check_work);
+		qdf_mem_free(hdd_ctx->sta_ap_intf_check_work_info);
+		hdd_ctx->sta_ap_intf_check_work_info = NULL;
+	}
 
 	status = hdd_get_front_adapter(hdd_ctx, &adapterNode);
 
@@ -4569,6 +4584,10 @@ QDF_STATUS hdd_start_all_adapters(hdd_context_t *hdd_ctx)
 
 		hdd_wmm_init(adapter);
 
+// LGE_CHANGE_START, 2017.0710, neo-wifi@lge.com, Suspend delay caused by scan pending, QCT Case 03029631
+        adapter->scan_info.mScanPending = false;
+// LGE_CHANGE_END,   2017.0710, neo-wifi@lge.com, Suspend delay caused by scan pending, QCT Case 03029631
+
 		switch (adapter->device_mode) {
 		case QDF_STA_MODE:
 		case QDF_P2P_CLIENT_MODE:
@@ -4580,7 +4599,6 @@ QDF_STATUS hdd_start_all_adapters(hdd_context_t *hdd_ctx)
 			hdd_init_station_mode(adapter);
 			/* Open the gates for HDD to receive Wext commands */
 			adapter->isLinkUpSvcNeeded = false;
-			adapter->scan_info.mScanPending = false;
 
 			/* Indicate disconnect event to supplicant
 			 * if associated previously
@@ -4643,6 +4661,12 @@ QDF_STATUS hdd_start_all_adapters(hdd_context_t *hdd_ctx)
 		default:
 			break;
 		}
+		/*
+		 * Action frame registered in one adapter which will
+		 * applicable to all interfaces
+		 */
+		wlan_hdd_cfg80211_register_frames(adapter);
+
 get_adapter:
 		status = hdd_get_next_adapter(hdd_ctx, adapterNode, &pNext);
 		adapterNode = pNext;
@@ -8209,7 +8233,7 @@ static uint8_t *hdd_get_platform_wlan_mac_buff(struct device *dev,
  *
  * Return: None
  */
-static void hdd_populate_random_mac_addr(hdd_context_t *hdd_ctx, uint32_t num)
+void hdd_populate_random_mac_addr(hdd_context_t *hdd_ctx, uint32_t num)
 {
 	uint32_t start_idx = QDF_MAX_CONCURRENCY_PERSONA - num;
 	uint32_t iter;
@@ -8951,6 +8975,9 @@ int hdd_configure_cds(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	cds_get_dfs_region(&dfs_reg);
 	cds_set_wma_dfs_region(dfs_reg);
 
+	if (hdd_enable_egap(hdd_ctx))
+		hdd_debug("enhance green ap is not enabled");
+
 	return 0;
 
 hdd_features_deinit:
@@ -9392,9 +9419,6 @@ int hdd_wlan_startup(struct device *dev)
 	hdd_runtime_suspend_context_init(hdd_ctx);
 	memdump_init();
 	hdd_driver_memdump_init();
-
-	if (hdd_enable_egap(hdd_ctx))
-		hdd_debug("enhance green ap is not enabled");
 
 	if (hdd_ctx->config->fIsImpsEnabled)
 		hdd_set_idle_ps_config(hdd_ctx, true);

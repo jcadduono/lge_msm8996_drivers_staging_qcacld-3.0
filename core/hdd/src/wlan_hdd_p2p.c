@@ -916,6 +916,14 @@ static void wlan_hdd_cancel_pending_roc(hdd_adapter_t *adapter)
 	mutex_lock(&cfg_state->remain_on_chan_ctx_lock);
 	roc_ctx = cfg_state->remain_on_chan_ctx;
 
+// LGE_CHANGE_START, 2017.0704, neo-wifi@lge.com, Fixed kernel crash when the DUT is tried to enter suspend mode, QCT Case 03019886
+    if (!roc_ctx) {
+        mutex_unlock(&cfg_state->remain_on_chan_ctx_lock);
+        hdd_debug("roc_ctx is NULL, No pending RoC");
+        return;
+    }
+// LGE_CHANGE_END,   2017.0704, neo-wifi@lge.com, Fixed kernel crash when the DUT is tried to enter suspend mode, QCT Case 03019886
+
 	if (roc_ctx->hdd_remain_on_chan_cancel_in_progress) {
 		mutex_unlock(&cfg_state->remain_on_chan_ctx_lock);
 		hdd_debug("roc cancel already in progress");
@@ -1368,12 +1376,7 @@ static int wlan_hdd_request_remain_on_channel(struct wiphy *wiphy,
 	if (0 != ret)
 		return ret;
 
-	if (pHddCtx->btCoexModeSet) {
-		hdd_debug("BTCoex Mode operation in progress");
-		isBusy = true;
-	}
-
-	if (!isBusy && cds_is_connection_in_progress(NULL, NULL)) {
+	if (cds_is_connection_in_progress(NULL, NULL)) {
 		hdd_debug("Connection is in progress");
 		isBusy = true;
 	}

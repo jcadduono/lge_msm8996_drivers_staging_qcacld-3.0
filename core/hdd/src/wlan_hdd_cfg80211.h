@@ -75,9 +75,6 @@
 #define WMM_OUI_TYPE   "\x00\x50\xf2\x02\x01"
 #define WMM_OUI_TYPE_SIZE  5
 
-#define VENDOR1_AP_OUI_TYPE "\x00\xE0\x4C"
-#define VENDOR1_AP_OUI_TYPE_SIZE 3
-
 #define WLAN_BSS_MEMBERSHIP_SELECTOR_VHT_PHY 126
 #define WLAN_BSS_MEMBERSHIP_SELECTOR_HT_PHY 127
 #define BASIC_RATE_MASK   0x80
@@ -3843,7 +3840,7 @@ void wlan_hdd_update_wiphy(hdd_context_t *hdd_ctx);
 void wlan_hdd_update_11n_mode(struct hdd_config *cfg);
 
 int wlan_hdd_cfg80211_register(struct wiphy *wiphy);
-void wlan_hdd_cfg80211_register_frames(hdd_adapter_t *pAdapter);
+int wlan_hdd_cfg80211_register_frames(hdd_adapter_t *pAdapter);
 
 void wlan_hdd_cfg80211_deregister_frames(hdd_adapter_t *pAdapter);
 
@@ -3870,19 +3867,6 @@ void hdd_select_cbmode(hdd_adapter_t *pAdapter, uint8_t operationChannel,
 
 uint8_t *wlan_hdd_cfg80211_get_ie_ptr(const uint8_t *ies_ptr, int length,
 				      uint8_t eid);
-/**
- * wlan_hdd_is_ap_supports_immediate_power_save() - to find certain vendor APs
- *				which do not support immediate power-save.
- * @ies: beacon IE of the AP which STA is connecting/connected to
- * @length: beacon IE length only
- *
- * This API takes the IE of connected/connecting AP and determines that
- * whether it has specific vendor OUI. If it finds then it will return false to
- * notify that AP doesn't support immediate power-save.
- *
- * Return: true or false based on findings
- */
-bool wlan_hdd_is_ap_supports_immediate_power_save(uint8_t *ies, int length);
 void wlan_hdd_del_station(hdd_adapter_t *adapter);
 
 #if defined(USE_CFG80211_DEL_STA_V2)

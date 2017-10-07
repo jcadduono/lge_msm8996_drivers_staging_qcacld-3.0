@@ -501,6 +501,11 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 	uint8_t deauthmsgcnt;
 	uint8_t disassocmsgcnt;
 	bool enable_bcast_probe_rsp;
+#ifdef FEATURE_SUPPORT_LGE
+// LGE_CHANGE_START, 2017.0628, neo-wifi@lge.com, Assoc response 2x2 in SAP mode, QCT Case 03003077
+    uint8_t ht_client_cnt;
+// LGE_CHANGE_END, 2017.0628, neo-wifi@lge.com, Assoc response 2x2 in SAP mode, QCT Case 03003077
+#endif
 } tPESession, *tpPESession;
 
 /*-------------------------------------------------------------------------

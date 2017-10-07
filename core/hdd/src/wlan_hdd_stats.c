@@ -3112,6 +3112,13 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 
 	sinfo->signal = pAdapter->rssi;
 	snr = pAdapter->hdd_stats.summary_stat.snr;
+
+#ifdef FEATURE_SUPPORT_LGE
+// [LGE_CHANGE_S] 2017.04.26, neo-wifi@lge.com, Print out RSSI/SNR/LINKSPEED, QCT Case 02924341
+       hdd_err("[LGE] SNR = %d, RSSI = %d\n", pAdapter->hdd_stats.summary_stat.snr, pAdapter->hdd_stats.summary_stat.rssi);
+// [LGE_CHANGE_E] 2017.04.26, neo-wifi@lge.com, Print out RSSI/SNR/LINKSPEED, QCT Case 02924341
+#endif
+
 	hdd_debug("snr: %d, rssi: %d",
 		pAdapter->hdd_stats.summary_stat.snr,
 		pAdapter->hdd_stats.summary_stat.rssi);
