@@ -48,6 +48,7 @@
 #include "cds_sched.h"
 #include "wma_types.h"
 #include "cds_concurrency.h"
+#include "wlan_hdd_scan.h"
 
 
 static int32_t wlan_hdd_tdls_peer_reset_discovery_processed(tdlsCtx_t *
@@ -923,6 +924,10 @@ void wlan_hdd_tdls_exit(hdd_adapter_t *pAdapter)
 
 	wlan_hdd_tdls_timers_destroy(pHddTdlsCtx);
 	wlan_hdd_tdls_free_list(pHddTdlsCtx);
+
+	if ((pHddCtx->tdls_scan_ctxt.source == VENDOR_SCAN) &&
+	    (NULL != pHddCtx->tdls_scan_ctxt.scan_request))
+		qdf_mem_free(pHddCtx->tdls_scan_ctxt.scan_request);
 
 	wlan_hdd_tdls_free_scan_request(&pHddCtx->tdls_scan_ctxt);
 
@@ -2175,16 +2180,32 @@ void wlan_hdd_check_conc_and_update_tdls_state(hdd_context_t *hdd_ctx,
 					       bool disable_tdls)
 {
 	hdd_adapter_t *temp_adapter;
+       uint16_t connected_tdls_peers;
 
 	temp_adapter = wlan_hdd_tdls_get_adapter(hdd_ctx);
 	if (NULL != temp_adapter) {
 		if (disable_tdls) {
+                       connected_tdls_peers = wlan_hdd_tdls_connected_peers(
+                                                               temp_adapter);
+                       if (!connected_tdls_peers ||
+                          (eTDLS_SUPPORT_NOT_ENABLED == hdd_ctx->tdls_mode)) {
+                               mutex_lock(&hdd_ctx->tdls_lock);
+                               if (hdd_ctx->set_state_info.set_state_cnt !=
+                                       0) {
+                                       mutex_unlock(&hdd_ctx->tdls_lock);
+                                       wlan_hdd_update_tdls_info(temp_adapter,
+                                                                 true, true);
+                                       return;
+                               }
+                               mutex_unlock(&hdd_ctx->tdls_lock);
+                               hdd_debug("No TDLS connected peers to delete");
+                               return;
+                       }
 			wlan_hdd_tdls_disable_offchan_and_teardown_links(
 								hdd_ctx);
-			wlan_hdd_update_tdls_info(temp_adapter, true, true);
-		} else {
-			wlan_hdd_update_tdls_info(temp_adapter, false, false);
+                       return;
 		}
+		wlan_hdd_update_tdls_info(temp_adapter, false, false);
 	}
 }
 

@@ -573,12 +573,12 @@ static int __pktlog_open(struct inode *i, struct file *f)
 			__func__, pl_info->curr_pkt_state);
 		return -EBUSY;
 	}
-
-	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
-		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+//LGE Patch Case : 03049016
+    if (cds_is_module_state_transitioning()) {
+		pr_info("%s: module transition in progress", __func__);
 		return -EAGAIN;
 	}
-
+//LGE Patch Case : 03049016
 	pl_info->curr_pkt_state = PKTLOG_OPR_IN_PROGRESS_READ_START;
 	scn = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!scn) {
@@ -639,12 +639,12 @@ static int __pktlog_release(struct inode *i, struct file *f)
 
 	if (!pl_info)
 		return -EINVAL;
-
-	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
-		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+//LGE Patch Case : 03049016
+    if (cds_is_module_state_transitioning()) {
+		pr_info("%s: module transition in progress", __func__);
 		return -EAGAIN;
 	}
-
+//LGE Patch Case : 03049016
 	scn = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!scn) {
 		pl_info->curr_pkt_state = PKTLOG_OPR_NOT_IN_PROGRESS;
@@ -860,12 +860,12 @@ __pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 	int fold_offset, ppos_data, cur_rd_offset;
 	struct ath_pktlog_info *pl_info;
 	struct ath_pktlog_buf *log_buf;
-
-	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
-		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+//LGE Patch Case : 03049016
+    if (cds_is_module_state_transitioning()) {
+		pr_info("%s: module transition in progress", __func__);
 		return -EAGAIN;
 	}
-
+//LGE Patch Case : 03049016
 	pl_info = (struct ath_pktlog_info *)
 					PDE_DATA(file->f_path.dentry->d_inode);
 	if (!pl_info)
@@ -1069,12 +1069,12 @@ static int __pktlog_mmap(struct file *file, struct vm_area_struct *vma)
 		printk(PKTLOG_TAG "%s: Log buffer unavailable\n", __func__);
 		return -ENOMEM;
 	}
-
-	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
-		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+//LGE Patch Case : 03049016
+    if (cds_is_module_state_transitioning()) {
+		pr_info("%s: module transition in progress", __func__);
 		return -EAGAIN;
 	}
-
+//LGE Patch Case : 03049016
 	vma->vm_flags |= VM_LOCKED;
 	vma->vm_ops = &pktlog_vmops;
 	pktlog_vopen(vma);

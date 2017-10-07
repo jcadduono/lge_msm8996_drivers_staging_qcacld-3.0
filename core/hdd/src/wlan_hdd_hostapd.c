@@ -1858,6 +1858,11 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		wlan_hdd_auto_shutdown_enable(pHddCtx, true);
 #endif
 
+		cds_host_diag_log_work(&pHddCtx->sap_wake_lock,
+				       HDD_SAP_WAKE_LOCK_DURATION,
+				       WIFI_POWER_EVENT_WAKELOCK_SAP);
+		qdf_wake_lock_timeout_acquire(&pHddCtx->sap_wake_lock,
+			 HDD_SAP_CLIENT_DISCONNECT_WAKE_LOCK_DURATION);
 		cfg80211_del_sta(dev,
 				 (const u8 *)&pSapEvent->sapevt.
 				 sapStationDisassocCompleteEvent.staMac.
@@ -2190,8 +2195,6 @@ stopbss:
 		we_custom_event_generic = we_custom_event;
 		wireless_send_event(dev, we_event, &wrqu,
 				    (char *)we_custom_event_generic);
-		cds_decr_session_set_pcl(pHostapdAdapter->device_mode,
-					 pHostapdAdapter->sessionId);
 
 		/* once the event is set, structure dev/pHostapdAdapter should
 		 * not be touched since they are now subject to being deleted
@@ -2823,29 +2826,23 @@ static __iw_softap_setparam(struct net_device *dev,
 		ret = wma_cli_set_command(pHostapdAdapter->sessionId,
 					  WMA_VDEV_TXRX_FWSTATS_ENABLE_CMDID,
 					  set_value, VDEV_CMD);
-#ifdef FEATURE_SUPPORT_LGE
 // [LGE_CHANGE_S] 2017.04.26, neo-wifi@lge.com, Add Reset Command for KPI log
-		hdd_debug("WE_TXRX_FWSTATS_RESET val %d", set_value);
+#ifdef FEATURE_SUPPORT_LGE
 		ret = wma_cli_set_command(pHostapdAdapter->sessionId,
 					  WMA_VDEV_TXRX_FWSTATS_RESET_CMDID,
 					  set_value, VDEV_CMD);
-// [LGE_CHANGE_E] 2017.04.26, neo-wifi@lge.com, Add Reset Command for KPI log
         {
-            hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
-            hdd_tx_rx_stats_t *pStats = &adapter->hdd_stats.hddTxRxStats;
-            int iTxDropCnt, iTxReqCnt, iRxReqCnt, iRxDropCnt;
-            int i=0;
+extern int wlan_hdd_get_sap_stats(hdd_adapter_t *adapter, struct station_info *info);
 
-            iTxReqCnt  = pStats->txXmitClassifiedAC[SME_AC_BK]+pStats->txXmitClassifiedAC[SME_AC_BE]+pStats->txXmitClassifiedAC[SME_AC_VI]+pStats->txXmitClassifiedAC[SME_AC_VO];
-            iTxDropCnt = pStats->txXmitDroppedAC[SME_AC_BK]+pStats->txXmitDroppedAC[SME_AC_BE]+pStats->txXmitDroppedAC[SME_AC_VI]+pStats->txXmitDroppedAC[SME_AC_VO];
-            iRxReqCnt  = iRxDropCnt = 0;
-            for(i=0; i<NUM_CPUS; i++) {
-                iRxReqCnt += pStats->rxPackets[i];
-                iRxDropCnt += pStats->rxDropped[i];
+            hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
+            struct station_info info;
+
+            if (pAdapter->device_mode == QDF_SAP_MODE) {
+                wlan_hdd_get_sap_stats(pAdapter, &info);
             }
-            hdd_err("[LGE] SoftAP Statistic Info - TxReq=%d, TxDrop=%d, RxReq=%d, RxDrop=%d \n", iTxReqCnt, iTxDropCnt, iRxReqCnt, iRxDropCnt);
         }
 #endif
+// [LGE_CHANGE_E] 2017.04.26, neo-wifi@lge.com, Add Reset Command for KPI log
 		break;
 	}
 	/* Firmware debug log */

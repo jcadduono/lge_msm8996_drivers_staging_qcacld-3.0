@@ -43,6 +43,7 @@
 #include "wlan_hdd_p2p.h"
 #include "wlan_hdd_trace.h"
 #include "wlan_hdd_scan.h"
+#include "wlan_hdd_power.h"
 #include "cds_concurrency.h"
 #include "wma_api.h"
 #include "cds_utils.h"
@@ -1371,7 +1372,7 @@ allow_suspend:
 		 * app's is suspending and not ableto process the connect
 		 * request to AP
 		 */
-		hdd_prevent_suspend_timeout(1000,
+		hdd_prevent_suspend_timeout(HDD_WAKELOCK_TIMEOUT_CONNECT,
 			WIFI_POWER_EVENT_WAKELOCK_SCAN);
 	} else {
 		/* Release the spin lock */
@@ -1452,15 +1453,19 @@ static bool wlan_hdd_sap_skip_scan_check(hdd_context_t *hdd_ctx,
  *
  * Return: none
  */
-static void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
+static void __wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
 {
 	hdd_adapter_t *adapter = container_of(work,
 					      hdd_adapter_t, scan_block_work);
 	struct cfg80211_scan_request *request;
+        hdd_context_t *hdd_ctx;
 	if (WLAN_HDD_ADAPTER_MAGIC != adapter->magic) {
 		hdd_err("HDD adapter context is invalid");
 		return;
 	}
+	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	if (0 != wlan_hdd_validate_context(hdd_ctx))
+		return;
 
 	request = adapter->request;
 	if (request) {
@@ -1474,6 +1479,13 @@ static void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
 			hdd_vendor_scan_callback(adapter, request, true);
 		adapter->request = NULL;
 	}
+}
+
+void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
+{
+	cds_ssr_protect(__func__);
+	__wlan_hdd_cfg80211_scan_block_cb(work);
+	cds_ssr_unprotect(__func__);
 }
 
 /**
@@ -1851,7 +1863,7 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 				} else if (pHddCtx->config->
 					   enableSelfRecovery) {
 					hdd_err("Triggering SSR due to scan stuck");
-					cds_trigger_recovery(false);
+					cds_trigger_recovery();
 				} else {
 					hdd_err("QDF_BUG due to scan stuck");
 					QDF_BUG(0);
@@ -2848,7 +2860,7 @@ hdd_sched_scan_callback(void *callbackContext,
 		 * app's is suspending and not able to process the connect
 		 * request to AP
 		 */
-		hdd_prevent_suspend_timeout(1000,
+		hdd_prevent_suspend_timeout(HDD_WAKELOCK_TIMEOUT_CONNECT,
 					    WIFI_POWER_EVENT_WAKELOCK_SCAN);
 	}
 

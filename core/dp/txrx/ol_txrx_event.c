@@ -89,11 +89,14 @@ wdi_event_handler(enum WDI_EVENT event,
 			  "Invalid WDI event in %s\n", __func__);
 		return;
 	}
-	if (!txrx_pdev) {
+	//LGE Patch Case : 03049016
+	if (!txrx_pdev || !txrx_pdev->wdi_event_list) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-			  "Invalid pdev in WDI event handler\n");
+              "Invalid txrx_pdev or wdi_event_list in %s",
+              __func__);
 		return;
 	}
+	//LGE Patch Case : 03049016
 	/*
 	 *  There can be NULL data, so no validation for the data
 	 *  Subscribers must do the sanity based on the requirements
@@ -224,6 +227,9 @@ A_STATUS wdi_event_detach(struct ol_txrx_pdev_t *txrx_pdev)
 	}
 	/* txrx_pdev->wdi_event_list would be non-null */
 	qdf_mem_free(txrx_pdev->wdi_event_list);
+	//LGE Patch Case : 03049016
+	txrx_pdev->wdi_event_list = NULL;
+	//LGE Patch Case : 03049016
 	return A_OK;
 }
 

@@ -3008,6 +3008,71 @@ static inline void wlan_hdd_fill_station_info_signal(struct station_info
 }
 #endif
 
+/*
+ * wlan_hdd_fill_summary_stats() - populate station_info summary stats
+ * @stats: summary stats to use as a source
+ * @info: kernel station_info struct to use as a destination
+ *
+ * Return: None
+ */
+static void wlan_hdd_fill_summary_stats(tCsrSummaryStatsInfo *stats,
+                    struct station_info *info)
+{
+    int i;
+
+    info->rx_packets = stats->rx_frm_cnt;
+    info->tx_packets = 0;
+    info->tx_retries = 0;
+    info->tx_failed = 0;
+
+    for (i = 0; i < WIFI_MAX_AC; ++i) {
+        info->tx_packets += stats->tx_frm_cnt[i];
+        info->tx_retries += stats->multiple_retry_cnt[i];
+        info->tx_failed += stats->fail_cnt[i];
+    }
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)) && !defined(WITH_BACKPORTS)
+    info->filled |= STATION_INFO_TX_PACKETS |
+            STATION_INFO_TX_RETRIES |
+            STATION_INFO_TX_FAILED |
+            STATION_INFO_RX_PACKETS;
+#else
+    info->filled |= BIT(NL80211_STA_INFO_RX_PACKETS) |
+            BIT(NL80211_STA_INFO_TX_PACKETS) |
+            BIT(NL80211_STA_INFO_TX_RETRIES) |
+            BIT(NL80211_STA_INFO_TX_FAILED);
+#endif
+}
+
+/**
+ * wlan_hdd_get_sap_stats() - get aggregate SAP stats
+ * @adapter: sap adapter to get stats for
+ * @info: kernel station_info struct to populate
+ *
+ * Fetch the vdev-level aggregate stats for the given SAP adapter. This is to
+ * support "station dump" and "station get" for SAP vdevs, even though they
+ * aren't technically stations.
+ *
+ * Return: errno
+ */
+int wlan_hdd_get_sap_stats(hdd_adapter_t *adapter, struct station_info *info)
+{
+    QDF_STATUS status;
+
+
+    status = wlan_hdd_get_station_stats(adapter);
+    if (QDF_IS_STATUS_ERROR(status)) {
+        hdd_err("Failed to get SAP stats; status:%d", status);
+        return qdf_status_to_os_return(status);
+    }
+
+    wlan_hdd_fill_summary_stats(&adapter->hdd_stats.summary_stat, info);
+
+    hdd_err("[LGE] %s()::TxPKT=%d, TxReTryPKT=%d, TxDropPKT=%d, RxPKT=%d", __func__, info->tx_packets, info->tx_retries, info->tx_failed, info->rx_packets);
+
+    return 0;
+}
+
 /**
  * __wlan_hdd_cfg80211_get_station() - get station statistics
  * @wiphy: Pointer to wiphy
@@ -3064,10 +3129,18 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+    status = wlan_hdd_validate_context(pHddCtx);
+    if (status)
+        return status;
+
 	if (wlan_hdd_validate_session_id(pAdapter->sessionId)) {
 		hdd_err("invalid session id: %d", pAdapter->sessionId);
 		return -EINVAL;
 	}
+
+    if (pAdapter->device_mode == QDF_SAP_MODE) {
+        return wlan_hdd_get_sap_stats(pAdapter, sinfo);
+    }
 
 	if ((eConnectionState_Associated != pHddStaCtx->conn_info.connState) ||
 	    (0 == ssidlen)) {
@@ -3113,12 +3186,6 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 	sinfo->signal = pAdapter->rssi;
 	snr = pAdapter->hdd_stats.summary_stat.snr;
 
-#ifdef FEATURE_SUPPORT_LGE
-// [LGE_CHANGE_S] 2017.04.26, neo-wifi@lge.com, Print out RSSI/SNR/LINKSPEED, QCT Case 02924341
-       hdd_err("[LGE] SNR = %d, RSSI = %d\n", pAdapter->hdd_stats.summary_stat.snr, pAdapter->hdd_stats.summary_stat.rssi);
-// [LGE_CHANGE_E] 2017.04.26, neo-wifi@lge.com, Print out RSSI/SNR/LINKSPEED, QCT Case 02924341
-#endif
-
 	hdd_debug("snr: %d, rssi: %d",
 		pAdapter->hdd_stats.summary_stat.snr,
 		pAdapter->hdd_stats.summary_stat.rssi);
@@ -3143,8 +3210,8 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 	myRate = pAdapter->hdd_stats.ClassA_stat.tx_rate * 5;
 	if (!(rate_flags & eHAL_TX_RATE_LEGACY)) {
 		nss = pAdapter->hdd_stats.ClassA_stat.nss;
-		if (wma_is_current_hwmode_dbs()) {
-			hdd_debug("Hw mode is DBS, Reduce nss to 1");
+        if (wma_is_current_hwmode_dbs() && nss > 1) {
+            hdd_debug("Hw mode is DBS, Reduce nss by 1");
 			nss--;
 		}
 
@@ -3531,25 +3598,9 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 		}
 	}
 
-	sinfo->tx_bytes = pAdapter->stats.tx_bytes;
+    wlan_hdd_fill_summary_stats(&pAdapter->hdd_stats.summary_stat, sinfo);
 
-	sinfo->tx_packets =
-		pAdapter->hdd_stats.summary_stat.tx_frm_cnt[0] +
-		pAdapter->hdd_stats.summary_stat.tx_frm_cnt[1] +
-		pAdapter->hdd_stats.summary_stat.tx_frm_cnt[2] +
-		pAdapter->hdd_stats.summary_stat.tx_frm_cnt[3];
-
-	sinfo->tx_retries =
-		pAdapter->hdd_stats.summary_stat.multiple_retry_cnt[0] +
-		pAdapter->hdd_stats.summary_stat.multiple_retry_cnt[1] +
-		pAdapter->hdd_stats.summary_stat.multiple_retry_cnt[2] +
-		pAdapter->hdd_stats.summary_stat.multiple_retry_cnt[3];
-
-	sinfo->tx_failed =
-		pAdapter->hdd_stats.summary_stat.fail_cnt[0] +
-		pAdapter->hdd_stats.summary_stat.fail_cnt[1] +
-		pAdapter->hdd_stats.summary_stat.fail_cnt[2] +
-		pAdapter->hdd_stats.summary_stat.fail_cnt[3];
+    sinfo->tx_bytes = pAdapter->stats.tx_bytes;
 
 	sinfo->rx_bytes = pAdapter->stats.rx_bytes;
 	sinfo->rx_packets = pAdapter->stats.rx_packets;
@@ -3557,20 +3608,20 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 	qdf_mem_copy(&pHddStaCtx->conn_info.txrate,
 		     &sinfo->txrate, sizeof(sinfo->txrate));
 
+#ifdef FEATURE_SUPPORT_LGE
+    hdd_err("[LGE] SNR = %d, RSSI = %d, TxPKT=%d, TxReTryPKT=%d, TxDropPKT=%d, RxPKT=%d",
+        pAdapter->hdd_stats.summary_stat.snr, pAdapter->hdd_stats.summary_stat.rssi,
+        sinfo->tx_packets, sinfo->tx_retries, sinfo->tx_failed, sinfo->rx_packets);
+#endif
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)) && !defined(WITH_BACKPORTS)
 	sinfo->filled |= STATION_INFO_TX_BITRATE |
 			 STATION_INFO_TX_BYTES   |
-			 STATION_INFO_TX_PACKETS |
-			 STATION_INFO_TX_RETRIES |
-			 STATION_INFO_TX_FAILED  |
 			 STATION_INFO_RX_BYTES   |
 			 STATION_INFO_RX_PACKETS;
 #else
-	sinfo->filled |= BIT(NL80211_STA_INFO_TX_BYTES)   |
-			 BIT(NL80211_STA_INFO_TX_BITRATE) |
-			 BIT(NL80211_STA_INFO_TX_PACKETS) |
-			 BIT(NL80211_STA_INFO_TX_RETRIES) |
-			 BIT(NL80211_STA_INFO_TX_FAILED)  |
+    sinfo->filled |= BIT(NL80211_STA_INFO_TX_BITRATE) |
+             BIT(NL80211_STA_INFO_TX_BYTES)   |
 			 BIT(NL80211_STA_INFO_RX_BYTES)   |
 			 BIT(NL80211_STA_INFO_RX_PACKETS);
 #endif

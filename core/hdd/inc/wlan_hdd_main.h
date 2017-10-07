@@ -227,6 +227,9 @@
 #define WLAN_HDD_QOS_MAP_CONFIGURE 4
 #define HDD_SAP_WAKE_LOCK_DURATION 10000        /* in msecs */
 
+/* SAP client disconnect wake lock duration in milli seconds */
+#define HDD_SAP_CLIENT_DISCONNECT_WAKE_LOCK_DURATION (1000)
+
 #if defined(CONFIG_HL_SUPPORT)
 #define HDD_MOD_EXIT_SSR_MAX_RETRIES 200
 #else
@@ -769,6 +772,8 @@ struct hdd_station_ctx {
 #ifdef WLAN_FEATURE_NAN_DATAPATH
 	struct nan_datapath_ctx ndp_ctx;
 #endif
+	bool ap_supports_immediate_power_save;
+
 
 };
 
@@ -1471,6 +1476,24 @@ struct sta_ap_intf_check_work_ctx {
 	hdd_adapter_t *adapter;
 };
 
+enum hdd_sta_smps_param {
+	/* RSSI threshold to enter Dynamic SMPS mode from inactive mode */
+	HDD_STA_SMPS_PARAM_UPPER_RSSI_THRESH = 0,
+	/*
+	 *  RSSI threshold to enter Stalled-D-SMPS mode from D-SMPS mode or
+	 * to enter D-SMPS mode from Stalled-D-SMPS mode
+	 */
+	HDD_STA_SMPS_PARAM_STALL_RSSI_THRESH = 1,
+	/* RSSI threshold to disable SMPS modes */
+	HDD_STA_SMPS_PARAM_LOWER_RSSI_THRESH = 2,
+	/* Upper threshold for beacon-RSSI. Used to reduce RX chainmask. */
+	HDD_STA_SMPS_PARAM_UPPER_BRSSI_THRESH = 3,
+	/* Lower threshold for beacon-RSSI. Used to increase RX chainmask. */
+	HDD_STA_SMPS_PARAM_LOWER_BRSSI_THRESH = 4,
+	/* Enable/Disable DTIM 1chRx feature */
+	HDD_STA_SMPS_PARAM_DTIM_1CHRX_ENABLE = 5
+};
+
 /** Adapter structure definition */
 struct hdd_context_s {
 	/** Global CDS context  */
@@ -1746,6 +1769,7 @@ struct hdd_context_s {
 	/* tdls source timer to enable/disable TDLS on p2p listen */
 	qdf_mc_timer_t tdls_source_timer;
 	qdf_atomic_t disable_lro_in_concurrency;
+	qdf_atomic_t disable_lro_in_low_tput;
 	bool fw_mem_dump_enabled;
 	uint8_t last_scan_reject_session_id;
 	scan_reject_states last_scan_reject_reason;

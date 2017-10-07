@@ -83,6 +83,8 @@ void hdd_scan_context_destroy(hdd_context_t *hdd_ctx);
 int wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 			   struct cfg80211_scan_request *request);
 
+void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work);
+
 #ifdef FEATURE_WLAN_SCAN_PNO
 int wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 				       struct net_device *dev,

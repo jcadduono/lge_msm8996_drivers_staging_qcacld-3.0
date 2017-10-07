@@ -60,11 +60,10 @@ static char *bw_str_arr[] = {"20MHz", "40MHz", "80MHz", "160MHz"};
  */
 #define tx_rate_stats_print_cmn(_tx_rate_info, _concise) \
 	do {							 \
-		qdf_print("TX Rate Info:");			 \
 		\
 		/* MCS */					 \
 		qdf_print("%s: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",\
-				"MCS counts (0..9)",		 \
+				"[Tx] MCS counts (0..9)",		 \
 				_tx_rate_info->mcs[0],		 \
 				_tx_rate_info->mcs[1],		 \
 				_tx_rate_info->mcs[2],		 \
@@ -76,65 +75,23 @@ static char *bw_str_arr[] = {"20MHz", "40MHz", "80MHz", "160MHz"};
 				_tx_rate_info->mcs[8],		 \
 				_tx_rate_info->mcs[9]);		 \
 		\
-		/* SGI */					 \
-		qdf_print("%s: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",\
-				"SGI counts (0..9)",		 \
-				_tx_rate_info->sgi[0],		 \
-				_tx_rate_info->sgi[1],		 \
-				_tx_rate_info->sgi[2],		 \
-				_tx_rate_info->sgi[3],		 \
-				_tx_rate_info->sgi[4],		 \
-				_tx_rate_info->sgi[5],		 \
-				_tx_rate_info->sgi[6],		 \
-				_tx_rate_info->sgi[7],		 \
-				_tx_rate_info->sgi[8],		 \
-				_tx_rate_info->sgi[9]);		 \
-		\
 		/* NSS */					 \
-		qdf_print("NSS  counts: 1x1 %d, 2x2 %d, 3x3 %d", \
+		qdf_print("[Tx] NSS  counts: 1x1 %d, 2x2 %d", \
 				_tx_rate_info->nss[0],		 \
-				_tx_rate_info->nss[1], _tx_rate_info->nss[2]);\
+				_tx_rate_info->nss[1]);\
 		\
 		/* BW */					 \
 		if (ARRAY_SIZE(_tx_rate_info->bw) == 3) \
-			qdf_print("BW counts: %s %d, %s %d, %s %d", \
+			qdf_print("[Tx] BW counts: %s %d, %s %d, %s %d", \
 				bw_str_arr[0], _tx_rate_info->bw[0],	 \
 				bw_str_arr[1], _tx_rate_info->bw[1],	 \
 				bw_str_arr[2], _tx_rate_info->bw[2]);	 \
 		else if (ARRAY_SIZE(_tx_rate_info->bw) == 4) \
-			qdf_print("BW counts: %s %d, %s %d, %s %d, %s %d", \
+			qdf_print("[Tx] BW counts: %s %d, %s %d, %s %d, %s %d", \
 				bw_str_arr[0], _tx_rate_info->bw[0],	 \
 				bw_str_arr[1], _tx_rate_info->bw[1],	 \
 				bw_str_arr[2], _tx_rate_info->bw[2],     \
 				bw_str_arr[3], _tx_rate_info->bw[3]);	 \
-		\
-		\
-		/* Preamble */					 \
-		qdf_print("Preamble (O C H V) counts: %d, %d, %d, %d",\
-				_tx_rate_info->pream[0],		 \
-				_tx_rate_info->pream[1],		 \
-				_tx_rate_info->pream[2],		 \
-				_tx_rate_info->pream[3]);		 \
-		\
-		/* STBC rate counts */				 \
-		qdf_print("%s: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",\
-				"STBC rate counts (0..9)",	 \
-				_tx_rate_info->stbc[0],		 \
-				_tx_rate_info->stbc[1],		 \
-				_tx_rate_info->stbc[2],		 \
-				_tx_rate_info->stbc[3],		 \
-				_tx_rate_info->stbc[4],		 \
-				_tx_rate_info->stbc[5],		 \
-				_tx_rate_info->stbc[6],		 \
-				_tx_rate_info->stbc[7],		 \
-				_tx_rate_info->stbc[8],		 \
-				_tx_rate_info->stbc[9]);	 \
-			\
-		/* LDPC and TxBF counts */			 \
-		qdf_print("LDPC Counts: %d", _tx_rate_info->ldpc);\
-		qdf_print("RTS Counts: %d", _tx_rate_info->rts_cnt);\
-		/* RSSI Values for last ack frames */		\
-		qdf_print("Ack RSSI: %d", _tx_rate_info->ack_rssi);\
 	} while (0)
 
 static void htt_t2h_stats_tx_rate_stats_print(wlan_dbg_tx_rate_info_t *
@@ -161,11 +118,10 @@ static void htt_t2h_stats_tx_rate_stats_print_v2(wlan_dbg_tx_rate_info_v2_t *
  */
 #define rx_rate_stats_print_cmn(_rx_phy_info, _concise) \
 	do {							\
-		qdf_print("RX Rate Info:");			\
 		\
 		/* MCS */					\
 		qdf_print("%s: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",\
-				"MCS counts (0..9)",		 \
+				"[Rx] MCS counts (0..9)",		 \
 				_rx_phy_info->mcs[0],			\
 				_rx_phy_info->mcs[1],			\
 				_rx_phy_info->mcs[2],			\
@@ -176,20 +132,6 @@ static void htt_t2h_stats_tx_rate_stats_print_v2(wlan_dbg_tx_rate_info_v2_t *
 				_rx_phy_info->mcs[7],			\
 				_rx_phy_info->mcs[8],			\
 				_rx_phy_info->mcs[9]);			\
-		\
-		/* SGI */						\
-		qdf_print("%s: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",\
-				"SGI counts (0..9)",		 \
-				_rx_phy_info->sgi[0],			\
-				_rx_phy_info->sgi[1],			\
-				_rx_phy_info->sgi[2],			\
-				_rx_phy_info->sgi[3],			\
-				_rx_phy_info->sgi[4],			\
-				_rx_phy_info->sgi[5],			\
-				_rx_phy_info->sgi[6],			\
-				_rx_phy_info->sgi[7],			\
-				_rx_phy_info->sgi[8],			\
-				_rx_phy_info->sgi[9]);			\
 		\
 		/*
 		 * NSS							       \
@@ -202,75 +144,11 @@ static void htt_t2h_stats_tx_rate_stats_print_v2(wlan_dbg_tx_rate_info_v2_t *
 		 * if needed in the future. Hence the addition in the host code\
 		 * at this line.
 		 */							       \
-		qdf_print("NSS  counts: 1x1 %d, 2x2 %d, 3x3 %d, 4x4 %d",\
+		qdf_print("[Rx] NSS  counts: 1x1 %d, 2x2 %d, 3x3 %d, 4x4 %d",\
 				_rx_phy_info->nss[0] + _rx_phy_info->nsts,\
 				_rx_phy_info->nss[1],			\
 				_rx_phy_info->nss[2],			\
 				_rx_phy_info->nss[3]);		\
-		\
-		/* NSTS */					\
-		qdf_print("NSTS count: %d", _rx_phy_info->nsts);	\
-		\
-		/* BW */					\
-		if (ARRAY_SIZE(_rx_phy_info->bw) == 3) \
-			qdf_print("BW counts: %s %d, %s %d, %s %d",	\
-				bw_str_arr[0], _rx_phy_info->bw[0],	\
-				bw_str_arr[1], _rx_phy_info->bw[1],	\
-				bw_str_arr[2], _rx_phy_info->bw[2]);	\
-		else if (ARRAY_SIZE(_rx_phy_info->bw) == 4) \
-			qdf_print("BW counts: %s %d, %s %d, %s %d, %s %d", \
-				bw_str_arr[0], _rx_phy_info->bw[0],	\
-				bw_str_arr[1], _rx_phy_info->bw[1],	\
-				bw_str_arr[2], _rx_phy_info->bw[2],    \
-				bw_str_arr[3], _rx_phy_info->bw[3]);	\
-		\
-		/* Preamble */					\
-		qdf_print("Preamble counts: %d, %d, %d, %d, %d, %d",\
-				_rx_phy_info->pream[0],		\
-				_rx_phy_info->pream[1],		\
-				_rx_phy_info->pream[2],		\
-				_rx_phy_info->pream[3],		\
-				_rx_phy_info->pream[4],		\
-				_rx_phy_info->pream[5]);		\
-		\
-		/* STBC rate counts */				\
-		qdf_print("%s: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",\
-				"STBC rate counts (0..9)",	\
-				_rx_phy_info->stbc[0],		\
-				_rx_phy_info->stbc[1],		\
-				_rx_phy_info->stbc[2],		\
-				_rx_phy_info->stbc[3],		\
-				_rx_phy_info->stbc[4],		\
-				_rx_phy_info->stbc[5],		\
-				_rx_phy_info->stbc[6],		\
-				_rx_phy_info->stbc[7],		\
-				_rx_phy_info->stbc[8],		\
-				_rx_phy_info->stbc[9]);		\
-		\
-		/* LDPC and TxBF counts */			\
-		qdf_print("LDPC TXBF Counts: %d, %d",		\
-				_rx_phy_info->ldpc, _rx_phy_info->txbf);\
-		/* RSSI Values for last received frames */	\
-		qdf_print("RSSI (data, mgmt): %d, %d", _rx_phy_info->data_rssi,\
-				_rx_phy_info->mgmt_rssi);		\
-		\
-		qdf_print("RSSI Chain 0 (0x%02x 0x%02x 0x%02x 0x%02x)",\
-				((_rx_phy_info->rssi_chain0 >> 24) & 0xff),\
-				((_rx_phy_info->rssi_chain0 >> 16) & 0xff),\
-				((_rx_phy_info->rssi_chain0 >> 8) & 0xff),\
-				((_rx_phy_info->rssi_chain0 >> 0) & 0xff));\
-		\
-		qdf_print("RSSI Chain 1 (0x%02x 0x%02x 0x%02x 0x%02x)",\
-				((_rx_phy_info->rssi_chain1 >> 24) & 0xff),\
-				((_rx_phy_info->rssi_chain1 >> 16) & 0xff),\
-				((_rx_phy_info->rssi_chain1 >> 8) & 0xff),\
-				((_rx_phy_info->rssi_chain1 >> 0) & 0xff));\
-		\
-		qdf_print("RSSI Chain 2 (0x%02x 0x%02x 0x%02x 0x%02x)",\
-				((_rx_phy_info->rssi_chain2 >> 24) & 0xff),\
-				((_rx_phy_info->rssi_chain2 >> 16) & 0xff),\
-				((_rx_phy_info->rssi_chain2 >> 8) & 0xff),\
-				((_rx_phy_info->rssi_chain2 >> 0) & 0xff));\
 	} while (0)
 
 static void htt_t2h_stats_rx_rate_stats_print(wlan_dbg_rx_rate_info_t *
